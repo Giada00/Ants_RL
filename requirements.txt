@@ -1,0 +1,9 @@
+pettingzoo
+pygame
+numpy
+tqdm
+gymnasium
+scipy
+import_ipynb
+matplotlib
+opencv-python
