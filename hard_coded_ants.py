@@ -42,8 +42,10 @@ class Ants(AECEnv):
         self.learner_population = kwargs['learner_population']
 
         self.sniff_threshold = kwargs['sniff_threshold']
+        self.sniff_limit = kwargs['sniff_limit']
         #self.smell_area = kwargs['smell_area']
-        #self.follow_mode = kwargs['follow_mode']
+        self.follow_food_pheromone_mode = kwargs['follow_food_pheromone_mode']
+        self.take_drop_mode = kwargs['take_drop_mode']
         
         self.lay_area = kwargs['lay_area']
         self.lay_amount = kwargs['lay_amount']
@@ -102,8 +104,8 @@ class Ants(AECEnv):
                             "nest_pheromone": 0.0,
                             "turtles": [],
                             "food": 0,
-                            "nest": False,
-                            "food_pile" : False
+                            "nest": 0,
+                            "food_pile" : 0
                             } for i in range(n_coords)
         }
 
@@ -218,7 +220,7 @@ class Ants(AECEnv):
     
     def _get_obs2(self, agent): # obs = [agent_has_food, patch_has_food, agent_in_nest, food_pheromone_in_ph_fov, nest_pheromone_in_ph_fov]
         f, _ = self._get_new_positions(self.ph_fov, agent)
-        obs = [agent["food"], self.patches[agent["pos"]]["food"], self.patches[agent["pos"]]["nest"]]
+        obs = [int(agent["food"]>0), int(self.patches[agent["pos"]]["food"]>0), self.patches[agent["pos"]]["nest"]]
         obs.extend([self.patches[tuple(i)]["food_pheromone"] for i in f])
         obs.extend([self.patches[tuple(i)]["nest_pheromone"] for i in f])
         obs = np.array(obs)
@@ -342,13 +344,43 @@ class Ants(AECEnv):
                 self.learners[self.agent],
                 food_pheromone_obs   
             )
+
             if max_pheromone >= self.sniff_threshold:
-                self.patches, self.learners[self.agent] = self.follow_pheromone2(
-                    self.patches,
-                    max_coords,
-                    max_ph_dir,
-                    self.learners[self.agent]
-                )
+
+                if self.follow_food_pheromone_mode == "basic":
+                    self.patches, self.learners[self.agent] = self.follow_pheromone2(
+                            self.patches,
+                            max_coords,
+                            max_ph_dir,
+                            self.learners[self.agent]
+                        ) 
+                elif self.follow_food_pheromone_mode == "turn_away":
+
+                    max_pheromone_nest, max_coords_nest, max_ph_dir_nest = self._find_max_pheromone2(
+                    self.learners[self.agent],
+                    nest_pheromone_obs   
+                    )
+
+                    if max_ph_dir == max_ph_dir_nest:
+                        self.learners[self.agent]["dir"] = (self.learners[self.agent]["dir"] + 4) % self.N_DIRS
+                        #self.patches, self.learners[self.agent] = self.step_forward(self.patches, self.learners[self.agent])
+                    else:
+                        self.patches, self.learners[self.agent] = self.follow_pheromone2(
+                            self.patches,
+                            max_coords,
+                            max_ph_dir,
+                            self.learners[self.agent]
+                        )
+                elif self.follow_food_pheromone_mode == "clip":
+                    if max_pheromone <= self.sniff_limit:
+                        self.patches, self.learners[self.agent] = self.follow_pheromone2(
+                            self.patches,
+                            max_coords,
+                            max_ph_dir,
+                            self.learners[self.agent]
+                        )
+                    else:
+                        self.patches, self.learners[self.agent] = self.walk2(self.patches, self.learners[self.agent])
             else:
                 self.patches, self.learners[self.agent] = self.walk2(self.patches, self.learners[self.agent])
         elif action == 3:   # Follow nest pheromone
@@ -365,12 +397,12 @@ class Ants(AECEnv):
                 )
         elif action == 4:   # Take food
             #print("agent", self.agent, "patch_has_food: ", patch_has_food)
-            if agent_has_food == 0 and patch_has_food > 0:
+            if agent_has_food == 0 and patch_has_food == 1:
                 self.patches, self.learners[self.agent] = self.take_food(self.patches, self.learners[self.agent])
             else:
                 self.patches, self.learners[self.agent] = self.walk2(self.patches, self.learners[self.agent])
         elif action == 5:   # Drop food
-            if agent_has_food != 0:
+            if agent_has_food == 1:
                 self.patches, self.learners[self.agent] = self.drop_food(self.patches, self.learners[self.agent])
             else:
                 self.patches, self.learners[self.agent] = self.walk2(self.patches, self.learners[self.agent])
@@ -392,6 +424,8 @@ class Ants(AECEnv):
             else:
                 self.patches, self.learners[self.agent] = self.walk2(self.patches, self.learners[self.agent])
             self.patches = self.lay_pheromone(self.patches, self.learners[self.agent]['pos'])
+        elif action == 8: # Step forward test
+            self.patches, self.learners[self.agent] = self.step_forward(self.patches, self.learners[self.agent])
         else:
             raise ValueError("Action out of range!")
         
@@ -532,6 +566,17 @@ class Ants(AECEnv):
             turtle["dir"] = idx_dir
         return patches, turtle
     
+    def step_forward(self, patches, turtle):
+        f, direction = self._get_new_positions(self.fov, turtle)
+        if self.wiggle_patches < self.N_DIRS:
+            idx_dir = f.shape[0] // 2
+        else:
+            idx_dir = direction
+        patches[turtle['pos']]['turtles'].remove(self.agent)
+        turtle["pos"] = tuple(f[idx_dir])
+        patches[turtle['pos']]['turtles'].append(self.agent)
+        return patches, turtle
+    
     def reset(self, seed=None, return_info=True, options=None):
         """
         Reset env.
@@ -603,7 +648,7 @@ class Ants(AECEnv):
         ])
 
         for coords in nest_coords:
-            patches[coords]["nest"] = True
+            patches[coords]["nest"] = 1
 
         for patch in patches:
             patches[patch]["nest_pheromone"] = 100 - (
@@ -632,21 +677,23 @@ class Ants(AECEnv):
             ])
 
         for coords in food_piles_coords:
-            patches[coords]["food"] = 1 #np.random.randint(1, 3)
-            patches[coords]["food_pile"] = True
+            patches[coords]["food"] = np.random.randint(1, 3)
+            patches[coords]["food_pile"] = 1
 
         return patches
 
     def drop_food(self, patches, ant):
         ant["food"] -= 1
         patches[ant["pos"]]["food"] += 1
-        ant["dir"] = (ant["dir"] + 4) % self.N_DIRS
+        if self.take_drop_mode == "turn_away":
+            ant["dir"] = (ant["dir"] + 4) % self.N_DIRS
         return patches, ant
     
     def take_food(self, patches, ant):
         ant["food"] += 1
         patches[ant["pos"]]["food"] -= 1
-        ant["dir"] = (ant["dir"] + 4) % self.N_DIRS
+        if self.take_drop_mode == "turn_away":
+            ant["dir"] = (ant["dir"] + 4) % self.N_DIRS
         return patches, ant
 
     def first_reward_test(self, carrying_food_ticks, searching_food_ticks, rewards_cust):
@@ -848,7 +895,8 @@ def main():
         "population": 0,
         "diffuse_area" : 1,
         "diffuse_mode" : "gaussian",
-        #"follow_mode" : "prob",
+        "follow_food_pheromone_mode" : "clip", # either "basic", "turn_away" or "clip"
+        "take_drop_mode": "turn_away", # either "keep_direction" or "turn_away"
         "lay_area" : 1,
         "evaporation" : 0.90,
         "PATCH_SIZE" : 20,
@@ -858,6 +906,7 @@ def main():
         "W" : 40,
         "learner_population" : 50,
         "sniff_threshold": 0.9,
+        "sniff_limit": 2,
         "wiggle_patches": 3,
         "sniff_patches": 3,
         #"smell_area": 1,
@@ -903,25 +952,25 @@ def main():
     for ep in tqdm(range(1, EPISODES + 1), desc="Episode"):
         env.reset()
         for tick in tqdm(range(params['episode_ticks']), desc="Tick", leave=False):
-            #print("tick ", tick)
+            #print("Tick: ", tick)
             for agent in env.agent_iter(max_iter=params["learner_population"]):
                 #print()
                 #print("agent", agent)
                 observation, reward, _ , _, info = env.last(agent)
-                #print(reward)
+                #print("Agent:", agent, "Reward: ", reward)
                 #print("tick: ", tick, "agent: ", agent, "obs", observation)
                 #action = random.choice(actions)
 
                 agent_has_food = observation[0]
                 patch_has_food = observation[1]
                 agent_in_nest = observation[2]
-                if agent_has_food != 0:
+                if agent_has_food == 1:
                     if agent_in_nest:
                         action = 5 # drop food
                     else:
                         action = 7 # lay food pheromone and head back to nest
                 else:
-                    if patch_has_food and not agent_in_nest:
+                    if patch_has_food == 1 and agent_in_nest == 0:
                         action = 4 # take food
                     else:
                         action = 2 # follow food pheromone
