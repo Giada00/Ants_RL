@@ -1,0 +1,33 @@
+{
+    "population": 0,
+    "diffuse_area" : 1,
+    "diffuse_mode" : "gaussian",
+    "follow_food_pheromone_mode" : "clip",
+    "take_drop_mode": "turn_away",
+    "lay_area" : 1,
+    "evaporation" : 0.90,
+    "PATCH_SIZE" : 20,
+    "TURTLE_SIZE" : 10,
+    "H" : 30,
+    "W" : 40,
+    "learner_population" : 50,
+    "sniff_threshold": 0.9,
+    "sniff_limit": 2,
+    "wiggle_patches": 3,
+    "sniff_patches": 3,
+    "lay_amount": 5,
+    "actions": [
+        "random-walk",
+        "lay-food-pheromone",
+        "follow-food-pheromone",
+        "follow-nest-pheromone",
+        "take-food",
+        "drop-food",
+        "random-walk-and-lay-food-pheromone",
+        "follow-nest-pheromone-and-lay-food-pheromone"
+    ],
+    "episode_ticks" : 500,
+    "penalty": -1,
+    "reward" : 100,
+    "reward_type": "first_reward_test"
+}

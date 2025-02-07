@@ -7,3 +7,4 @@ scipy
 import_ipynb
 matplotlib
 opencv-python
+pandas

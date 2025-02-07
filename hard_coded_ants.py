@@ -23,6 +23,15 @@ class Ants(AECEnv):
     
     def action_space(self, agent):
         return self._action_spaces[agent]
+      
+    def observations_n(self, same_obs=True):
+        #if same_obs:
+        #    return self.observation_space('0').shape[0]
+        return 128
+
+    def actions_n(self, same_actions=True):
+        if same_actions:
+            return self.action_space('0').n.item()
     
     metadata = {"render_modes": ["human", "server"]}
     
@@ -67,6 +76,7 @@ class Ants(AECEnv):
         self.actions = kwargs['actions']
         self.penalty = kwargs["penalty"]
         self.reward = kwargs["reward"]
+        self.reward_type = kwargs["reward_type"]
 
         # Used to calculate the agent's directions.
         self.N_DIRS = 8
@@ -168,7 +178,7 @@ class Ants(AECEnv):
 
         # Create an observation space for each agent
         self._observation_spaces = {
-                a: Box(low=0.0, high=np.inf, shape=(self.wiggle_patches*2+3,), dtype=np.float32)
+                a: Box(low=0.0, high=np.inf, shape=(self.sniff_patches*2+3,), dtype=np.float32)
                 for a in self.possible_agents
             }
         
@@ -226,12 +236,30 @@ class Ants(AECEnv):
         obs = np.array(obs)
         return obs
     
-    def convert_observation2(self, obs):
-        if np.unique(obs).shape[0] == 1:
-            obs_id = np.random.randint(self.sniff_patches)
+    def convert_observation(self, obs):
+        agent_has_food = int(obs[0].item())
+        patch_has_food = int(obs[1].item())
+        agent_in_nest = int(obs[2].item())
+        food_pheromone_obs = obs[3:3+self.sniff_patches]
+        nest_pheromone_obs = obs[3+self.sniff_patches:]
+        food_pheromone_obs_index = food_pheromone_obs.argmax().item()
+        nest_pheromone_obs_index = nest_pheromone_obs.argmax().item()
+        food_pheromone_obs_bin = bin(food_pheromone_obs_index).split('b')[1]
+        nest_pheromone_obs_bin = bin(nest_pheromone_obs_index).split('b')[1]
+
+        if self.sniff_patches > 3:
+            if len(food_pheromone_obs_bin) < 3:
+                food_pheromone_obs_bin = "0"*(3-len(food_pheromone_obs_bin))+food_pheromone_obs_bin
+            if len(nest_pheromone_obs_bin) < 3:
+                nest_pheromone_obs_bin = "0"*(3-len(nest_pheromone_obs_bin))+nest_pheromone_obs_bin
         else:
-            obs_id = obs.argmax().item()
-        return obs_id
+            if len(food_pheromone_obs_bin) < 2:
+                food_pheromone_obs_bin = "0"*(2-len(food_pheromone_obs_bin))+food_pheromone_obs_bin
+            if len(nest_pheromone_obs_bin) < 2:
+                nest_pheromone_obs_bin = "0"*(2-len(nest_pheromone_obs_bin))+nest_pheromone_obs_bin
+
+        obs_bin = str(agent_has_food) + str(patch_has_food) + str(agent_in_nest) + food_pheromone_obs_bin + nest_pheromone_obs_bin
+        return int(obs_bin, 2)
     
     def _find_neighbours(self, area: int):
         """
@@ -424,8 +452,8 @@ class Ants(AECEnv):
             else:
                 self.patches, self.learners[self.agent] = self.walk2(self.patches, self.learners[self.agent])
             self.patches = self.lay_pheromone(self.patches, self.learners[self.agent]['pos'])
-        elif action == 8: # Step forward test
-            self.patches, self.learners[self.agent] = self.step_forward(self.patches, self.learners[self.agent])
+        #elif action == 8: # Step forward test
+        #    self.patches, self.learners[self.agent] = self.step_forward(self.patches, self.learners[self.agent])
         else:
             raise ValueError("Action out of range!")
         
@@ -916,14 +944,15 @@ def main():
             "lay-food-pheromone",
             "follow-food-pheromone",
             "follow-nest-pheromone",
-            "take-food"
-            "drop-food"
-            "random-walk-and-lay-food-pheromone"
+            "take-food",
+            "drop-food",
+            "random-walk-and-lay-food-pheromone",
             "follow-nest-pheromone-and-lay-food-pheromone"
         ],
         "episode_ticks" : 500,
         "penalty": -1,
-        "reward" : 100
+        "reward" : 100,
+        "reward_type": "first_reward_test"
     }
 
     params_visualizer = {
