@@ -26,8 +26,15 @@
         "random-walk-and-lay-food-pheromone",
         "follow-nest-pheromone-and-lay-food-pheromone"
     ],
+    "states": [
+        "has-food-in-nest",
+        "has-food-out-nest",
+        "food-available-in-nest",
+        "food-available-out-nest",
+        "food-not-available"
+    ],
     "episode_ticks" : 500,
     "penalty": -1,
     "reward" : 100,
-    "reward_type": "first_reward_test"
+    "reward_type": "reward_relative_food_punish_wandering_time"
 }

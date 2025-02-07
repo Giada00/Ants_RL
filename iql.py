@@ -8,7 +8,9 @@ def train(
         qtable, 
         actions_dict:dict, 
         action_dict:dict, 
-        reward_dict:dict, 
+        reward_dict:dict,
+        obs_dict:dict,
+        obs_action_dict:dict, 
         train_episodes:int, 
         train_log_every, 
         alpha:float, 
@@ -34,6 +36,26 @@ def train(
         for tick in tqdm(range(1, params['episode_ticks'] + 1), desc="TICKS", colour='green', position=1, leave=False):
             for agent in env.agent_iter(max_iter=params['learner_population']):
                 cur_state, reward, _, _, _ = env.last(agent)
+
+                agent_has_food = cur_state[0]
+                patch_has_food = cur_state[1]
+                agent_in_nest = cur_state[2]
+
+                if agent_has_food == 1:
+                    if agent_in_nest == 1:
+                        obs_dict[str(ep)]["has-food-in-nest"] += 1
+                    else:
+                        obs_dict[str(ep)]["has-food-out-nest"] += 1
+                else:
+                    if patch_has_food == 1:
+                        if agent_in_nest == 1:
+                            obs_dict[str(ep)]["food-available-in-nest"] += 1
+                        else:
+                            obs_dict[str(ep)]["food-available-out-nest"] += 1
+                    else:
+                        obs_dict[str(ep)]["food-not-available"] += 1
+                
+
                 cur_s = env.convert_observation(cur_state)
 
                 if ep == 1 and tick == 1:
@@ -48,7 +70,20 @@ def train(
                     else:
                         action = np.argmax(qtable[int(agent)][cur_s])
 
-                #env.step(actions[action])
+                if agent_has_food == 1:
+                    if agent_in_nest == 1:
+                        obs_action_dict[str(ep)]["has-food-in-nest"][str(action)] += 1
+                    else:
+                        obs_action_dict[str(ep)]["has-food-out-nest"][str(action)] += 1
+                else:
+                    if patch_has_food == 1:
+                        if agent_in_nest == 1:
+                            obs_action_dict[str(ep)]["food-available-in-nest"][str(action)] += 1
+                        else:
+                            obs_action_dict[str(ep)]["food-available-out-nest"][str(action)] += 1
+                    else:
+                        obs_action_dict[str(ep)]["food-not-available"][str(action)] += 1
+
                 env.step(action)
 
                 old_s[agent] = cur_s
@@ -63,8 +98,6 @@ def train(
                     env.patches,
                     env.learners,
                     env.turtles
-                    #env.fov,
-                    #env.ph_fov
                 )
         
         if decay_type == "log":
@@ -74,11 +107,13 @@ def train(
         
         if ep % train_log_every == 0:
             avg_rew = round((sum(reward_dict[str(ep)].values()) / params["episode_ticks"]) / params["learner_population"], 2)
-            #avg_cluster = round(env.avg_cluster2(), 2)
-            avg_cluster = 0
             eps = round(epsilon, 4)
-            value = [ep, tick * ep, avg_cluster, avg_rew]
+            value = [ep, tick * ep, avg_rew]
             value.extend(list(actions_dict[str(ep)].values()))
+            for s in env.states:
+                value.append(obs_dict[str(ep)][s])
+                for i, a in enumerate(env.actions):
+                    value.append(obs_action_dict[str(ep)][s][str(i)])
             value.append(eps)
             logger.load_value(value)
 
@@ -92,10 +127,12 @@ def train(
 
 def eval(
         env,
-        params:dict, 
+        params:dict,
         actions_dict,
         action_dict,
         reward_dict,
+        obs_dict,
+        obs_action_dict,
         test_episodes:int,
         qtable,
         test_log_every:int,
@@ -113,12 +150,42 @@ def eval(
         for tick in tqdm(range(1, params['episode_ticks'] + 1), desc="TICKS", colour='green', leave=False):
             for agent in env.agent_iter(max_iter=params['learner_population']):
                 state, reward, _, _, _ = env.last(agent)
+
+                agent_has_food = state[0]
+                patch_has_food = state[1]
+                agent_in_nest = state[2]
+
+                if agent_has_food == 1:
+                    if agent_in_nest == 1:
+                        obs_dict[str(ep)]["has-food-in-nest"] += 1
+                    else:
+                        obs_dict[str(ep)]["has-food-out-nest"] += 1
+                else:
+                    if patch_has_food == 1:
+                        if agent_in_nest == 1:
+                            obs_dict[str(ep)]["food-available-in-nest"] += 1
+                        else:
+                            obs_dict[str(ep)]["food-available-out-nest"] += 1
+                    else:
+                        obs_dict[str(ep)]["food-not-available"] += 1
+
                 s = env.convert_observation(state)
                 action = np.argmax(qtable[int(agent)][s])
-                #env.step(action)
-                #print(actions[action])
-                #breakpoint()
-                #env.step(actions[action])
+
+                if agent_has_food == 1:
+                    if agent_in_nest == 1:
+                        obs_action_dict[str(ep)]["has-food-in-nest"][str(action)] += 1
+                    else:
+                        obs_action_dict[str(ep)]["has-food-out-nest"][str(action)] += 1
+                else:
+                    if patch_has_food == 1:
+                        if agent_in_nest == 1:
+                            obs_action_dict[str(ep)]["food-available-in-nest"][str(action)] += 1
+                        else:
+                            obs_action_dict[str(ep)]["food-available-out-nest"][str(action)] += 1
+                    else:
+                        obs_action_dict[str(ep)]["food-not-available"][str(action)] += 1
+
                 env.step(action)
                 
                 actions_dict[str(ep)][str(action)] += 1
@@ -130,16 +197,18 @@ def eval(
                     env.patches,
                     env.learners,
                     env.turtles
-                    #env.fov,
-                    #env.ph_fov
                 )
         
         if ep % test_log_every == 0:
             avg_rew = round((sum(reward_dict[str(ep)].values()) / params["episode_ticks"]) / params["learner_population"], 2)
-            #avg_cluster = round(env.avg_cluster2(), 2)
-            avg_cluster = 0
-            value = [ep, tick * ep, avg_cluster, avg_rew]
+            
+            value = [ep, tick * ep, avg_rew]
             value.extend(list(actions_dict[str(ep)].values()))
+            for s in env.states:
+                value.append(obs_dict[str(ep)][s])
+                for i, a in enumerate(env.actions):
+                    value.append(obs_action_dict[str(ep)][s][str(i)])
+
             logger.load_value(value)
     
     logger.empty_table()

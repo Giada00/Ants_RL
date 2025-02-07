@@ -118,11 +118,14 @@ class Logger:
         metrics = [
             "Episode",
             "Tick",
-            "Avg cluster X episode",
             "Avg reward X episode", 
         ]
         for a in params["actions"]:
             metrics.append(a)
+        for s in params["states"]:
+            metrics.append(s)
+            for a in params["actions"]:
+                metrics.append(s + "_" + a)
         #if not train:
         #    for l in range(params['population'], params['population'] + params['learner_population']):
         #        for a in params["actions"]:

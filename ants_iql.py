@@ -14,6 +14,7 @@ def create_agent(params: dict, l_params: dict, n_obs, n_actions, train):
     population = params['population']
     learner_population = params['learner_population']
     episodes =  l_params["train_episodes"] if train else l_params["test_episodes"]
+    states = params["states"]
     # DOC dict che tiene conto della frequenza di scelta delle action per ogni episodio {episode: {action: _, action: _, ...}}
     # Actions:
     #   0: random-walk 
@@ -45,6 +46,25 @@ def create_agent(params: dict, l_params: dict, n_obs, n_actions, train):
         }
         for ep in range(1, episodes + 1)
     }
+    
+    obs_dict = {
+        str(ep): {
+            s : 0 
+            for s in states
+        }
+        for ep in range(1, episodes + 1)
+    }
+
+    obs_action_dict = {
+        str(ep): {
+            s : {
+                str(ac): 0 
+                for ac in range(n_actions) 
+            } 
+            for s in states
+        }
+        for ep in range(1, episodes + 1)
+    }
 
     if train:
         # Q-Learning
@@ -68,6 +88,8 @@ def create_agent(params: dict, l_params: dict, n_obs, n_actions, train):
             actions_dict,
             action_dict,
             reward_dict,
+            obs_dict,
+            obs_action_dict
         )
     else:
         return (
@@ -75,6 +97,8 @@ def create_agent(params: dict, l_params: dict, n_obs, n_actions, train):
             actions_dict,
             action_dict,
             reward_dict,
+            obs_dict,
+            obs_action_dict
         )
 
 def create_logger(curdir, params, l_params, log_params, train, weights_path=None):
@@ -129,6 +153,8 @@ def main(args):
             actions_dict,
             action_dict,
             reward_dict,
+            obs_dict,
+            obs_action_dict
         ) = create_agent(params, l_params, n_obs, n_actions, args.train)
         logger, train_log_every = create_logger(curdir, params, l_params, log_params, args.train)
 
@@ -140,6 +166,8 @@ def main(args):
             actions_dict,
             action_dict,
             reward_dict,
+            obs_dict,
+            obs_action_dict,
             train_episodes,
             train_log_every,
             alpha,
@@ -164,6 +192,8 @@ def main(args):
             actions_dict,
             action_dict,
             reward_dict,
+            obs_dict,
+            obs_action_dict,
         ) = create_agent(params, l_params, n_obs, n_actions, args.train)
         logger, test_log_every = create_logger(curdir, params, l_params, log_params, args.train, args.qtable_path)
 
@@ -179,6 +209,8 @@ def main(args):
             actions_dict,
             action_dict,
             reward_dict,
+            obs_dict,
+            obs_action_dict,
             test_episodes,
             qtable,
             test_log_every,

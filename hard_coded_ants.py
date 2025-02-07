@@ -14,8 +14,9 @@ from typing import Optional
 
 class Ants(AECEnv):
     def observe(self, agent: str) -> ObsType:
-        self.agent = self.agent_name_mapping[self.agent_selection]
-        self.observations[agent] = self.process_agent()
+        self.agent = self.agent_name_mapping[agent]
+        #self.observations[agent] = self.process_agent()
+        self.observations[agent] = self._get_obs2(self.learners[self.agent])
         return np.array(self.observations[agent])
 
     def observation_space(self, agent):
@@ -27,7 +28,10 @@ class Ants(AECEnv):
     def observations_n(self, same_obs=True):
         #if same_obs:
         #    return self.observation_space('0').shape[0]
-        return 128
+        if self.sniff_patches > 3:
+            return pow(2, 9)
+        else:
+            return pow(2, 7)
 
     def actions_n(self, same_actions=True):
         if same_actions:
@@ -74,6 +78,7 @@ class Ants(AECEnv):
         ), "Error! wiggle_patches admitted values are: 1, 3, 5, 7, 8."
 
         self.actions = kwargs['actions']
+        self.states = kwargs['states']
         self.penalty = kwargs["penalty"]
         self.reward = kwargs["reward"]
         self.reward_type = kwargs["reward_type"]
@@ -459,7 +464,12 @@ class Ants(AECEnv):
         
         #self.observations[str(self.agent)] = self.process_agent()
 
-        self.carrying_food_ticks, self.searching_food_ticks, self.rewards_cust, cur_reward = self.first_reward_test(self.carrying_food_ticks, self.searching_food_ticks, self.rewards_cust)
+        if self.reward_type == "reward_nest_food_punish_piles_food_and_wandering_time":
+            self.carrying_food_ticks, self.searching_food_ticks, self.rewards_cust, cur_reward = self.reward_nest_food_punish_piles_food_and_wandering_time(self.carrying_food_ticks, self.searching_food_ticks, self.rewards_cust)
+        elif self.reward_type == "reward_nest_food_punish_wandering_time":
+            self.carrying_food_ticks, self.searching_food_ticks, self.rewards_cust, cur_reward = self.reward_nest_food_punish_wandering_time(self.carrying_food_ticks, self.searching_food_ticks, self.rewards_cust)
+        elif self.reward_type == "reward_relative_food_punish_wandering_time":
+            self.carrying_food_ticks, self.searching_food_ticks, self.rewards_cust, cur_reward = self.reward_relative_food_punish_wandering_time(self.carrying_food_ticks, self.searching_food_ticks, self.rewards_cust)
 
         if self._agent_selector.is_last():
             for ag in self.agents:
@@ -724,7 +734,7 @@ class Ants(AECEnv):
             ant["dir"] = (ant["dir"] + 4) % self.N_DIRS
         return patches, ant
 
-    def first_reward_test(self, carrying_food_ticks, searching_food_ticks, rewards_cust):
+    def reward_nest_food_punish_piles_food_and_wandering_time(self, carrying_food_ticks, searching_food_ticks, rewards_cust):
         if self.learners[self.agent]["food"] > 0:
             carrying_food_ticks[self.agent] += 1
         else:
@@ -745,6 +755,46 @@ class Ants(AECEnv):
 
         rewards_cust[self.agent].append(cur_reward)
         return carrying_food_ticks, searching_food_ticks, rewards_cust, cur_reward
+    
+    def reward_nest_food_punish_wandering_time(self, carrying_food_ticks, searching_food_ticks, rewards_cust):
+        if self.learners[self.agent]["food"] > 0:
+            carrying_food_ticks[self.agent] += 1
+        else:
+            searching_food_ticks[self.agent] += 1
+
+        food_nest = 0
+        for coords, info in self.patches.items():
+            if info["nest"]:
+                food_nest += info["food"]
+
+        cur_reward = carrying_food_ticks[self.agent]*self.penalty + \
+                     searching_food_ticks[self.agent]*self.penalty + \
+                     food_nest * self.reward
+
+        rewards_cust[self.agent].append(cur_reward)
+        return carrying_food_ticks, searching_food_ticks, rewards_cust, cur_reward
+    
+    def reward_relative_food_punish_wandering_time(self, carrying_food_ticks, searching_food_ticks, rewards_cust):
+        if self.learners[self.agent]["food"] > 0:
+            carrying_food_ticks[self.agent] += 1
+        else:
+            searching_food_ticks[self.agent] += 1
+
+        food_nest = 0
+        food_piles = 0
+        for coords, info in self.patches.items():
+            if info["nest"]:
+                food_nest += info["food"]
+            else:
+                food_piles += info["food"]
+
+        cur_reward = carrying_food_ticks[self.agent]*self.penalty + \
+                     searching_food_ticks[self.agent]*self.penalty + \
+                     food_nest/food_piles * self.reward
+        
+        rewards_cust[self.agent].append(cur_reward)
+        return carrying_food_ticks, searching_food_ticks, rewards_cust, cur_reward
+    
 
 class AntsVisualizer:
     def __init__(
@@ -949,10 +999,17 @@ def main():
             "random-walk-and-lay-food-pheromone",
             "follow-nest-pheromone-and-lay-food-pheromone"
         ],
+        "states": [
+            "has-food-in-nest",
+            "has-food-out-nest",
+            "food-available-in-nest",
+            "food-available-out-nest",
+            "food-not-available"
+        ],
         "episode_ticks" : 500,
         "penalty": -1,
         "reward" : 100,
-        "reward_type": "first_reward_test"
+        "reward_type": "reward_nest_food_punish_piles_food_and_wandering_time"
     }
 
     params_visualizer = {
