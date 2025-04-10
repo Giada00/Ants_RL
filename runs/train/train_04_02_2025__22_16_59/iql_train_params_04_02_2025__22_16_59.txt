@@ -1,0 +1,52 @@
+{
+  "population": 0,
+  "diffuse_area": 1,
+  "diffuse_mode": "gaussian",
+  "follow_food_pheromone_mode": "clip",
+  "take_drop_mode": "turn_away",
+  "lay_area": 1,
+  "evaporation": 0.9,
+  "PATCH_SIZE": 20,
+  "TURTLE_SIZE": 10,
+  "H": 30,
+  "W": 40,
+  "learner_population": 50,
+  "sniff_threshold": 0.9,
+  "sniff_limit": 2,
+  "wiggle_patches": 3,
+  "sniff_patches": 3,
+  "lay_amount": 5,
+  "actions": [
+    "random-walk",
+    "lay-food-pheromone",
+    "follow-food-pheromone",
+    "follow-nest-pheromone",
+    "take-food",
+    "drop-food",
+    "random-walk-and-lay-food-pheromone",
+    "follow-nest-pheromone-and-lay-food-pheromone"
+  ],
+  "states": [
+    "has-food-in-nest",
+    "has-food-out-nest",
+    "food-available-in-nest",
+    "food-available-out-nest",
+    "food-not-available"
+  ],
+  "episode_ticks": 500,
+  "penalty": -1,
+  "reward": 100,
+  "reward_type": "reward_nest_food_punish_wandering_time"
+}
+----------
+TRAIN_EPISODES = 1000
+TRAIN_LOG_EVERY = 1
+----------
+alpha = 0.1
+gamma = 0.9
+epsilon = 1.0
+epsilon_min = 0.01
+decay_type = log
+decay = 0.9995
+----------
+Training time: 1:11:13.537761

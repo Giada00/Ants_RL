@@ -66,6 +66,20 @@ def create_agent(params: dict, l_params: dict, n_obs, n_actions, train):
         for ep in range(1, episodes + 1)
     }
 
+    situation_action_agent_dict = {
+        str(ep): {
+            str(ag): {
+                s : {
+                    str(ac): 0 
+                    for ac in range(n_actions) 
+                } 
+                for s in states
+            }
+            for ag in range(population, population + learner_population)
+        }
+        for ep in range(1, episodes + 1)
+    }
+
     if train:
         # Q-Learning
         # Q_table
@@ -98,7 +112,8 @@ def create_agent(params: dict, l_params: dict, n_obs, n_actions, train):
             action_dict,
             reward_dict,
             obs_dict,
-            obs_action_dict
+            obs_action_dict,
+            situation_action_agent_dict
         )
 
 def create_logger(curdir, params, l_params, log_params, train, weights_path=None):
@@ -194,6 +209,7 @@ def main(args):
             reward_dict,
             obs_dict,
             obs_action_dict,
+            situation_action_agent_dict
         ) = create_agent(params, l_params, n_obs, n_actions, args.train)
         logger, test_log_every = create_logger(curdir, params, l_params, log_params, args.train, args.qtable_path)
 
@@ -211,6 +227,7 @@ def main(args):
             reward_dict,
             obs_dict,
             obs_action_dict,
+            situation_action_agent_dict,
             test_episodes,
             qtable,
             test_log_every,
@@ -285,10 +302,14 @@ if __name__ == "__main__":
     parser.add_argument(
         "--qtable_path",
         type=str,
+        #default="C:/Users/Giash/Desktop/Ants_RL/runs/weights/iql_train_weights_reward_nest_food_punish_wandering_time_02_08_2025__00_06_05.npy",
+        #default = "c:/Users/Giash/Desktop/Ants_RL/runs/weights/iql_train_weights_reward_nest_food_punish_wandering_time_02_10_2025__11_46_14.npy",
+        #default = "C:/Users/Giash/Desktop/Ants_RL/runs/weights/iql_train_weights_reward_nest_food_punish_wandering_time_03_27_2025__00_03_27.npy",
+        default = "C:/Users/Giash/Desktop/Ants_RL/runs/weights/iql_train_weights_reward_relative_food_punish_wandering_time_04_10_2025__12_43_44.npy",
         required=False
     )
     
-    parser.add_argument("--train", type=bool, default=True, required=False)
+    parser.add_argument("--train", type=bool, default=False, required=False)
 
     parser.add_argument("--random_seed", type=int, default=42, required=False)
     

@@ -129,6 +129,7 @@ class Ants(AECEnv):
             self.nest_pos = self.coords[(len(self.coords) // 2) - (self.H // 2)]
         else:
             self.nest_pos = self.coords[(len(self.coords) // 2)]
+
         self.patches = self._setup_nest(self.patches, self.nest_pos)
         #print(self.nest_pos)
         #print(self.patches)
@@ -139,7 +140,9 @@ class Ants(AECEnv):
             (self.coords[0][0] + self.patch_size * int(self.W * 1/6), self.coords[0][1] + self.patch_size * int(self.H * 3/4)), 
             (self.coords[n_coords - 1][0] - self.patch_size * int(self.W * 1/6), self.nest_pos[1])
         )
-        self.patches = self._setup_food_piles(self.patches, self.food_piles_pos)
+
+        self.patches, self.total_food_amount = self._setup_food_piles(self.patches, self.food_piles_pos)
+        #print("Total food: ", self.total_food_amount)
 
         #Create learner turtles
         self.learners = {
@@ -149,6 +152,16 @@ class Ants(AECEnv):
                 "food": 0 
             } for i in range(self.population, pop_tot)
         }
+
+        # Test added stuf
+        self.learners_view_of_nest = {
+            i: 0 for i in range(self.population, pop_tot)
+        }
+        self.food_individually_retrieved = {
+            i: 0 for i in range(self.population, pop_tot)
+        }
+        self.learners_done = 0
+        self.all_learners_done = False
 
         # Create NON learner turtles
         self.turtles = {
@@ -247,8 +260,20 @@ class Ants(AECEnv):
         agent_in_nest = int(obs[2].item())
         food_pheromone_obs = obs[3:3+self.sniff_patches]
         nest_pheromone_obs = obs[3+self.sniff_patches:]
-        food_pheromone_obs_index = food_pheromone_obs.argmax().item()
-        nest_pheromone_obs_index = nest_pheromone_obs.argmax().item()
+
+        if np.unique(food_pheromone_obs).shape[0] == 1:
+            food_pheromone_obs_index = np.random.randint(self.sniff_patches)
+        else:
+            food_pheromone_obs_index = food_pheromone_obs.argmax().item()
+
+        if np.unique(nest_pheromone_obs).shape[0] == 1:
+            nest_pheromone_obs_index = np.random.randint(self.sniff_patches)
+        else:
+            nest_pheromone_obs_index = nest_pheromone_obs.argmax().item()
+
+        #food_pheromone_obs_index = food_pheromone_obs.argmax().item()
+        #nest_pheromone_obs_index = nest_pheromone_obs.argmax().item()
+        
         food_pheromone_obs_bin = bin(food_pheromone_obs_index).split('b')[1]
         nest_pheromone_obs_bin = bin(nest_pheromone_obs_index).split('b')[1]
 
@@ -354,135 +379,166 @@ class Ants(AECEnv):
         return observations
     
     def step(self, action: int):
-        if(self.terminations[self.agent_selection] or self.truncations[self.agent_selection]):
-            self._was_dead_step(action)
-            return
+
+        # if(self.terminations[self.agent_selection] or self.truncations[self.agent_selection]):
+        #     self._was_dead_step(action)
+        #     return
         
         self.agent = self.agent_name_mapping[self.agent_selection]  # ID of agent
 
         #self.observations[str(self.agent)] = self.process_agent()
 
-        agent_has_food = self.observations[str(self.agent)][0]
-        patch_has_food = self.observations[str(self.agent)][1]
-        agent_in_nest = self.observations[str(self.agent)][2]
-        food_pheromone_obs = self.observations[str(self.agent)][3:3+self.sniff_patches]
-        nest_pheromone_obs = self.observations[str(self.agent)][3+self.sniff_patches:]
-        
-        if action == 0:     # Walk
-            self.patches, self.learners[self.agent] = self.walk2(self.patches, self.learners[self.agent])
-        elif action == 1:   # Lay food pheromone
-            self.patches = self.lay_pheromone(self.patches, self.learners[self.agent]['pos'])
-        elif action == 2:   # Follow food pheromone
-            max_pheromone, max_coords, max_ph_dir = self._find_max_pheromone2(
-                self.learners[self.agent],
-                food_pheromone_obs   
-            )
+        if not (self.terminations[self.agent_selection] or self.truncations[self.agent_selection]):
 
-            if max_pheromone >= self.sniff_threshold:
+            agent_has_food = self.observations[str(self.agent)][0]
+            patch_has_food = self.observations[str(self.agent)][1]
+            agent_in_nest = self.observations[str(self.agent)][2]
+            food_pheromone_obs = self.observations[str(self.agent)][3:3+self.sniff_patches]
+            nest_pheromone_obs = self.observations[str(self.agent)][3+self.sniff_patches:]
+            
+            if action == 0:     # Walk
+                self.patches, self.learners[self.agent] = self.walk2(self.patches, self.learners[self.agent])
+            elif action == 1:   # Lay food pheromone
+                self.patches = self.lay_pheromone(self.patches, self.learners[self.agent]['pos'])
+            elif action == 2:   # Follow food pheromone
+                max_pheromone, max_coords, max_ph_dir = self._find_max_pheromone2(
+                    self.learners[self.agent],
+                    food_pheromone_obs   
+                )
 
-                if self.follow_food_pheromone_mode == "basic":
-                    self.patches, self.learners[self.agent] = self.follow_pheromone2(
-                            self.patches,
-                            max_coords,
-                            max_ph_dir,
-                            self.learners[self.agent]
-                        ) 
-                elif self.follow_food_pheromone_mode == "turn_away":
+                if max_pheromone >= self.sniff_threshold:
 
-                    max_pheromone_nest, max_coords_nest, max_ph_dir_nest = self._find_max_pheromone2(
+                    if self.follow_food_pheromone_mode == "basic":
+                        self.patches, self.learners[self.agent] = self.follow_pheromone2(
+                                self.patches,
+                                max_coords,
+                                max_ph_dir,
+                                self.learners[self.agent]
+                            ) 
+                    elif self.follow_food_pheromone_mode == "turn_away":
+
+                        max_pheromone_nest, max_coords_nest, max_ph_dir_nest = self._find_max_pheromone2(
+                        self.learners[self.agent],
+                        nest_pheromone_obs   
+                        )
+
+                        if max_ph_dir == max_ph_dir_nest:
+                            self.learners[self.agent]["dir"] = (self.learners[self.agent]["dir"] + 4) % self.N_DIRS
+                            #self.patches, self.learners[self.agent] = self.step_forward(self.patches, self.learners[self.agent])
+                        else:
+                            self.patches, self.learners[self.agent] = self.follow_pheromone2(
+                                self.patches,
+                                max_coords,
+                                max_ph_dir,
+                                self.learners[self.agent]
+                            )
+                    elif self.follow_food_pheromone_mode == "clip":
+                        if max_pheromone <= self.sniff_limit:
+                            self.patches, self.learners[self.agent] = self.follow_pheromone2(
+                                self.patches,
+                                max_coords,
+                                max_ph_dir,
+                                self.learners[self.agent]
+                            )
+                        else:
+                            self.patches, self.learners[self.agent] = self.walk2(self.patches, self.learners[self.agent])
+                else:
+                    self.patches, self.learners[self.agent] = self.walk2(self.patches, self.learners[self.agent])
+            elif action == 3:   # Follow nest pheromone
+                max_pheromone, max_coords, max_ph_dir = self._find_max_pheromone2(
                     self.learners[self.agent],
                     nest_pheromone_obs   
+                )
+                if max_pheromone >= self.sniff_threshold:
+                    self.patches, self.learners[self.agent] = self.follow_pheromone2(
+                        self.patches,
+                        max_coords,
+                        max_ph_dir,
+                        self.learners[self.agent]
                     )
-
-                    if max_ph_dir == max_ph_dir_nest:
-                        self.learners[self.agent]["dir"] = (self.learners[self.agent]["dir"] + 4) % self.N_DIRS
-                        #self.patches, self.learners[self.agent] = self.step_forward(self.patches, self.learners[self.agent])
-                    else:
-                        self.patches, self.learners[self.agent] = self.follow_pheromone2(
-                            self.patches,
-                            max_coords,
-                            max_ph_dir,
-                            self.learners[self.agent]
-                        )
-                elif self.follow_food_pheromone_mode == "clip":
-                    if max_pheromone <= self.sniff_limit:
-                        self.patches, self.learners[self.agent] = self.follow_pheromone2(
-                            self.patches,
-                            max_coords,
-                            max_ph_dir,
-                            self.learners[self.agent]
-                        )
-                    else:
-                        self.patches, self.learners[self.agent] = self.walk2(self.patches, self.learners[self.agent])
-            else:
+            elif action == 4:   # Take food
+                #print("agent", self.agent, "patch_has_food: ", patch_has_food)
+                if agent_has_food == 0 and patch_has_food == 1 and agent_in_nest == 0: # Ant can't take nest food now
+                    self.patches, self.learners[self.agent] = self.take_food(self.patches, self.learners[self.agent])
+                else:
+                    self.patches, self.learners[self.agent] = self.walk2(self.patches, self.learners[self.agent])
+            elif action == 5:   # Drop food
+                if agent_has_food == 1:
+                    self.patches, self.learners[self.agent] = self.drop_food(self.patches, self.learners[self.agent])
+                    if agent_in_nest == 1:
+                        self.food_individually_retrieved[self.agent] += 1
+                else:
+                    self.patches, self.learners[self.agent] = self.walk2(self.patches, self.learners[self.agent])
+            elif action == 6:   # Lay food pheromone and walk
                 self.patches, self.learners[self.agent] = self.walk2(self.patches, self.learners[self.agent])
-        elif action == 3:   # Follow nest pheromone
-            max_pheromone, max_coords, max_ph_dir = self._find_max_pheromone2(
-                self.learners[self.agent],
-                nest_pheromone_obs   
-            )
-            if max_pheromone >= self.sniff_threshold:
-                self.patches, self.learners[self.agent] = self.follow_pheromone2(
-                    self.patches,
-                    max_coords,
-                    max_ph_dir,
-                    self.learners[self.agent]
+                self.patches = self.lay_pheromone(self.patches, self.learners[self.agent]['pos'])
+            elif action == 7:   # Lay food pheromone and follow nest pheromone
+                max_pheromone, max_coords, max_ph_dir = self._find_max_pheromone2(
+                    self.learners[self.agent],
+                    nest_pheromone_obs,     
                 )
-        elif action == 4:   # Take food
-            #print("agent", self.agent, "patch_has_food: ", patch_has_food)
-            if agent_has_food == 0 and patch_has_food == 1:
-                self.patches, self.learners[self.agent] = self.take_food(self.patches, self.learners[self.agent])
+                if max_pheromone >= self.sniff_threshold:
+                    self.patches, self.learners[self.agent] = self.follow_pheromone2(
+                        self.patches,
+                        max_coords,
+                        max_ph_dir,
+                        self.learners[self.agent]
+                    )
+                else:
+                    self.patches, self.learners[self.agent] = self.walk2(self.patches, self.learners[self.agent])
+                self.patches = self.lay_pheromone(self.patches, self.learners[self.agent]['pos'])
+            #elif action == 8: # Step forward test
+            #    self.patches, self.learners[self.agent] = self.step_forward(self.patches, self.learners[self.agent])
             else:
-                self.patches, self.learners[self.agent] = self.walk2(self.patches, self.learners[self.agent])
-        elif action == 5:   # Drop food
-            if agent_has_food == 1:
-                self.patches, self.learners[self.agent] = self.drop_food(self.patches, self.learners[self.agent])
-            else:
-                self.patches, self.learners[self.agent] = self.walk2(self.patches, self.learners[self.agent])
-        elif action == 6:   # Lay food pheromone and walk
-            self.patches, self.learners[self.agent] = self.walk2(self.patches, self.learners[self.agent])
-            self.patches = self.lay_pheromone(self.patches, self.learners[self.agent]['pos'])
-        elif action == 7:   # Lay food pheromone and follow nest pheromone
-            max_pheromone, max_coords, max_ph_dir = self._find_max_pheromone2(
-                self.learners[self.agent],
-                nest_pheromone_obs,     
-            )
-            if max_pheromone >= self.sniff_threshold:
-                self.patches, self.learners[self.agent] = self.follow_pheromone2(
-                    self.patches,
-                    max_coords,
-                    max_ph_dir,
-                    self.learners[self.agent]
-                )
-            else:
-                self.patches, self.learners[self.agent] = self.walk2(self.patches, self.learners[self.agent])
-            self.patches = self.lay_pheromone(self.patches, self.learners[self.agent]['pos'])
-        #elif action == 8: # Step forward test
-        #    self.patches, self.learners[self.agent] = self.step_forward(self.patches, self.learners[self.agent])
-        else:
-            raise ValueError("Action out of range!")
-        
-        #self.observations[str(self.agent)] = self.process_agent()
+                raise ValueError("Action out of range!")
+            
+            #self.observations[str(self.agent)] = self.process_agent()
 
-        if self.reward_type == "reward_nest_food_punish_piles_food_and_wandering_time":
-            self.carrying_food_ticks, self.searching_food_ticks, self.rewards_cust, cur_reward = self.reward_nest_food_punish_piles_food_and_wandering_time(self.carrying_food_ticks, self.searching_food_ticks, self.rewards_cust)
-        elif self.reward_type == "reward_nest_food_punish_wandering_time":
-            self.carrying_food_ticks, self.searching_food_ticks, self.rewards_cust, cur_reward = self.reward_nest_food_punish_wandering_time(self.carrying_food_ticks, self.searching_food_ticks, self.rewards_cust)
-        elif self.reward_type == "reward_relative_food_punish_wandering_time":
-            self.carrying_food_ticks, self.searching_food_ticks, self.rewards_cust, cur_reward = self.reward_relative_food_punish_wandering_time(self.carrying_food_ticks, self.searching_food_ticks, self.rewards_cust)
+            if self.reward_type == "reward_nest_food_punish_piles_food_and_wandering_time":
+                self.carrying_food_ticks, self.searching_food_ticks, self.rewards_cust, cur_reward = self.reward_nest_food_punish_piles_food_and_wandering_time(self.carrying_food_ticks, self.searching_food_ticks, self.rewards_cust)
+            elif self.reward_type == "reward_nest_food_punish_wandering_time":
+                self.carrying_food_ticks, self.searching_food_ticks, self.rewards_cust, cur_reward = self.reward_nest_food_punish_wandering_time(self.carrying_food_ticks, self.searching_food_ticks, self.rewards_cust)
+            elif self.reward_type == "reward_relative_food_punish_wandering_time":
+                self.carrying_food_ticks, self.searching_food_ticks, self.rewards_cust, cur_reward = self.reward_relative_food_punish_wandering_time(self.carrying_food_ticks, self.searching_food_ticks, self.rewards_cust)
+            elif self.reward_type == "reward_nest_food_punish_wandering_time_incremental":
+                self.rewards_cust, cur_reward = self.reward_nest_food_punish_wandering_time_incremental(self.rewards_cust)
+            elif self.reward_type == "reward_indiviually_retrieved_nest_food_punish_wandering_time_incremental":
+                self.rewards_cust, cur_reward = self.reward_indiviually_retrieved_nest_food_punish_wandering_time_incremental(self.rewards_cust)
+            elif self.reward_type == "reward_indiviually_retrieved_nest_food_punish_wandering_time":
+                self.carrying_food_ticks, self.searching_food_ticks, self.rewards_cust, cur_reward = self.reward_indiviually_retrieved_nest_food_punish_wandering_time(self.carrying_food_ticks, self.searching_food_ticks, self.rewards_cust)
+            
+            # Terminate the current agent if there is no more food to be found
 
-        if self._agent_selector.is_last():
-            for ag in self.agents:
-                self.rewards[ag] = self.rewards_cust[self.agent_name_mapping[ag]][-1]
-            if len(self.turtles) > 0:
-                self.turtles, self.patches = self.move(self.turtles, self.patches)
-            if self.diffuse_mode == "gaussian":
-                self.patches = self._diffuse_and_evaporate(self.patches)
+            food_in_nest = 0
+            for coords, info in self.patches.items():
+                if info["nest"]:
+                    food_in_nest += info["food"]
+
+            if food_in_nest == self.total_food_amount:
+                self.terminations[self.agent_selection] = True
+
+            if self._agent_selector.is_last():
+                for ag in self.agents:
+                    self.rewards[ag] = self.rewards_cust[self.agent_name_mapping[ag]][-1]
+                if len(self.turtles) > 0:
+                    self.turtles, self.patches = self.move(self.turtles, self.patches)
+                if self.diffuse_mode == "gaussian":
+                    self.patches = self._diffuse_and_evaporate(self.patches)
+                else:
+                    self.patches = self._diffuse(self.patches)
+                    self.patches = self._evaporate(self.patches)
             else:
-                self.patches = self._diffuse(self.patches)
-                self.patches = self._evaporate(self.patches)
+                self._clear_rewards()
+
         else:
-            self._clear_rewards()
+
+            self.learners_done += 1
+            self.all_learners_done = self.learners_done == len(self.learners)
+            if self._agent_selector.is_last():
+                for ag in self.agents:
+                    self.rewards[ag] = self.rewards_cust[self.agent_name_mapping[ag]][-1]
+            else:
+                self._clear_rewards()      
             
         self.agent_selection = self._agent_selector.next()
         self._cumulative_rewards[str(self.agent)] = 0
@@ -643,6 +699,8 @@ class Ants(AECEnv):
             self.learners[l]['pos'] = self.nest_pos
             self.patches[self.learners[l]['pos']]['turtles'].append(l)  # DOC id of learner turtle
             self.learners[l]['food'] = 0
+            self.learners_view_of_nest[l] = 0
+            self.food_individually_retrieved[l] = 0
         # re-position NON learner turtles
         for t in self.turtles:
             self.patches[self.turtles[t]['pos']]['turtles'].remove(t)
@@ -654,8 +712,12 @@ class Ants(AECEnv):
             self.patches[p]['nest_pheromone'] = 0.0
             self.patches[p]['food'] = 0
 
-        self._setup_food_piles(self.patches, self.food_piles_pos)
-        self._setup_nest(self.patches, self.nest_pos)
+        self.learners_done = 0
+        self.all_learners_done = False
+
+        self.patches, self.total_food_amount = self._setup_food_piles(self.patches, self.food_piles_pos)
+        self.patches = self._setup_nest(self.patches, self.nest_pos)
+        #print("Total food reset: ", self.total_food_amount)
 
         self.observations = {
             a: np.zeros(self.wiggle_patches*2+3, dtype=np.float32)
@@ -718,7 +780,12 @@ class Ants(AECEnv):
             patches[coords]["food"] = np.random.randint(1, 3)
             patches[coords]["food_pile"] = 1
 
-        return patches
+        total_food = 0
+        for patch, info in patches.items():
+            if info["food_pile"]:
+                total_food += info["food"]
+
+        return patches, total_food
 
     def drop_food(self, patches, ant):
         ant["food"] -= 1
@@ -757,6 +824,23 @@ class Ants(AECEnv):
         return carrying_food_ticks, searching_food_ticks, rewards_cust, cur_reward
     
     def reward_nest_food_punish_wandering_time(self, carrying_food_ticks, searching_food_ticks, rewards_cust):
+
+        # Test part
+
+        # food_piles = 0
+        # for coords, info in self.patches.items():
+        #     if info["food_pile"]:
+        #         food_piles += info["food"]
+
+        # if food_piles:
+        #     if self.learners[self.agent]["food"] > 0:
+        #         carrying_food_ticks[self.agent] += 1
+        #     else:
+        #         searching_food_ticks[self.agent] += 1
+
+
+        # End test part
+
         if self.learners[self.agent]["food"] > 0:
             carrying_food_ticks[self.agent] += 1
         else:
@@ -790,8 +874,45 @@ class Ants(AECEnv):
 
         cur_reward = carrying_food_ticks[self.agent]*self.penalty + \
                      searching_food_ticks[self.agent]*self.penalty + \
-                     food_nest/food_piles * self.reward
+                     food_nest/max(food_piles, 0.5) * self.reward
         
+        rewards_cust[self.agent].append(cur_reward)
+        return carrying_food_ticks, searching_food_ticks, rewards_cust, cur_reward
+    
+    def reward_nest_food_punish_wandering_time_incremental(self, rewards_cust):
+
+        food_nest = 0
+        for coords, info in self.patches.items():
+            if info["nest"]:
+                food_nest += info["food"]
+
+        cur_reward = self.penalty + (food_nest - self.learners_view_of_nest[self.agent]) * self.reward
+        
+        self.learners_view_of_nest[self.agent] = food_nest
+
+        rewards_cust[self.agent].append(cur_reward)
+        return rewards_cust, cur_reward
+    
+    def reward_indiviually_retrieved_nest_food_punish_wandering_time_incremental(self,rewards_cust):
+
+        cur_reward = self.penalty + self.food_individually_retrieved[self.agent] * self.reward
+        
+        self.food_individually_retrieved[self.agent] = 0
+
+        rewards_cust[self.agent].append(cur_reward)
+        return rewards_cust, cur_reward
+    
+    def reward_indiviually_retrieved_nest_food_punish_wandering_time(self, carrying_food_ticks, searching_food_ticks, rewards_cust):
+
+        if self.learners[self.agent]["food"] > 0:
+            carrying_food_ticks[self.agent] += 1
+        else:
+            searching_food_ticks[self.agent] += 1
+
+        cur_reward = carrying_food_ticks[self.agent]*self.penalty + \
+                     searching_food_ticks[self.agent]*self.penalty + \
+                     self.food_individually_retrieved[self.agent] * self.reward
+
         rewards_cust[self.agent].append(cur_reward)
         return carrying_food_ticks, searching_food_ticks, rewards_cust, cur_reward
     
@@ -974,13 +1095,13 @@ def main():
         "diffuse_area" : 1,
         "diffuse_mode" : "gaussian",
         "follow_food_pheromone_mode" : "clip", # either "basic", "turn_away" or "clip"
-        "take_drop_mode": "turn_away", # either "keep_direction" or "turn_away"
+        "take_drop_mode": "keep_direction", # either "keep_direction" or "turn_away"
         "lay_area" : 1,
         "evaporation" : 0.90,
         "PATCH_SIZE" : 20,
         "TURTLE_SIZE" : 10,
 
-        "H" : 30,
+        "H" : 40,
         "W" : 40,
         "learner_population" : 50,
         "sniff_threshold": 0.9,
@@ -1009,7 +1130,7 @@ def main():
         "episode_ticks" : 500,
         "penalty": -1,
         "reward" : 100,
-        "reward_type": "reward_nest_food_punish_piles_food_and_wandering_time"
+        "reward_type": "reward_nest_food_punish_wandering_time_incremental"
     }
 
     params_visualizer = {
@@ -1027,53 +1148,81 @@ def main():
       "TURTLE_SIZE": 10,
     }
 
-    EPISODES = 5
-    SEED = 2
+    EPISODES = 2
+    SEED = 42
 
     np.random.seed(SEED)
     env = Ants(SEED, **params)
     env_vis = AntsVisualizer(env.W_pixels, env.H_pixels, **params_visualizer)
 
+    rew_d = {}
+    ticks_per_episode = {}
+
     start_time = time.time()
     for ep in tqdm(range(1, EPISODES + 1), desc="Episode"):
+        with open('out.txt', 'a') as f:
+            print("Episode: ", ep, file = f)
         env.reset()
-        for tick in tqdm(range(params['episode_ticks']), desc="Tick", leave=False):
-            #print("Tick: ", tick)
+        rew_d[ep] = {}
+        ticks_per_episode[ep] = {}
+        for tick in tqdm(range(1, params['episode_ticks'] + 1), desc="Tick", leave=False):
+            with open('out.txt', 'a') as f:
+                print("Tick: ", tick, file = f)
+
             for agent in env.agent_iter(max_iter=params["learner_population"]):
-                #print()
-                #print("agent", agent)
-                observation, reward, _ , _, info = env.last(agent)
-                #print("Agent:", agent, "Reward: ", reward)
-                #print("tick: ", tick, "agent: ", agent, "obs", observation)
-                #action = random.choice(actions)
+
+                if env.all_learners_done:
+                    break
+
+                observation, reward, termination, truncation, info = env.last(agent)
+
+                with open('out.txt', 'a') as f:
+                        print("Agent:", agent, "Reward: ", reward, file = f)
+
+                with open("prova.txt", 'a') as f1:
+                    print(ep, tick, agent, reward, sep = ",", file = f1)
+                
+                if agent in ticks_per_episode[ep].keys():
+                    ticks_per_episode[ep][agent] += 1
+                else:
+                    ticks_per_episode[ep][agent] = 1
+
+                if agent in rew_d[ep].keys():
+                    rew_d[ep][agent] += reward
+                else:
+                    rew_d[ep][agent] = reward
 
                 agent_has_food = observation[0]
                 patch_has_food = observation[1]
                 agent_in_nest = observation[2]
-                if agent_has_food == 1:
-                    if agent_in_nest:
-                        action = 5 # drop food
-                    else:
-                        action = 7 # lay food pheromone and head back to nest
+
+                if termination or truncation:
+                    action = None
                 else:
-                    if patch_has_food == 1 and agent_in_nest == 0:
-                        action = 4 # take food
+                    if agent_has_food == 1:
+                        if agent_in_nest:
+                            action = 5 # drop food
+                        else:
+                            #action = 7 # lay food pheromone and head back to nest
+                            action = 3 # 3 7
                     else:
-                        action = 2 # follow food pheromone
-                #print(tick, agent_has_food, patch_has_food, agent_in_nest, " agent ", env.learners[int(agent)], " patch ", env.patches[env.learners[int(agent)]["pos"]])
-                #for coords, info in env.patches.items():
-                #    if info["food_pile"] and coords == (270, 170):
-                #        print(coords, info["food"])
+                        if patch_has_food == 1 and agent_in_nest == 0:
+                            action = 4 # take food
+                        else:
+                            #action = 2 # follow food pheromone
+                            action = 0 # 0 2
+                
                 env.step(action)
-                #for coords, info in env.patches.items():
-                #    if info["food_pile"] and coords == (270, 170):
-                #        print(coords, info["food"])
-                #        print(info["turtles"])
+
+            if env.all_learners_done:
+                break
+                
             env_vis.render(
                 env.patches,
                 env.learners,
                 env.turtles
             )
+
         sum_nest = 0
         sum_piles = 0
         for coords, info in env.patches.items():
@@ -1081,7 +1230,15 @@ def main():
                 sum_nest += info["food"]
             else:
                 sum_piles += info["food"]
-        print(f"nest: {sum_nest} piles: {sum_piles}")
+        #print(f"nest: {sum_nest} piles: {sum_piles}")
+        
+        print("Average reward:", round((sum({agent: rew/ticks_per_episode[ep][agent] for agent, rew in rew_d[ep].items()}.values()) / params["learner_population"]), 2))
+        #print("Average reward:", round((sum(rew_d[ep].values()) / params["episode_ticks"]) / params["learner_population"], 2))
+        with open('out.txt', 'a') as f:
+            #print("Average reward:", round((sum(rew_d[ep].values()) / params["episode_ticks"]) / params["learner_population"], 2), file = f)
+            print("Average reward:", round((sum({agent: rew/ticks_per_episode[ep][agent] for agent, rew in rew_d[ep].items()}.values()) / params["learner_population"]), 2), file = f)
+            print({key : value + env.searching_food_ticks[key] for key, value in env.carrying_food_ticks.items()})
+            print(ticks_per_episode)
 
     print("Total time = ", time.time() - start_time)
     env.close()

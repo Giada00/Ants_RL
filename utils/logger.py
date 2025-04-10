@@ -6,12 +6,14 @@ import gc
 from collections import deque
 import os
 import json
+import pickle
 
 class Logger:
     def __init__(self, curdir: str, params: dict, l_params: dict, log_params: dict, train: bool, deep_algo: bool, buffer_size: int, weights_file=None):
         OUTPUT_FILE_EXTENSION = ".csv"
         WEIGHTS_FILE_EXTENSION = ".npy"
         PARAMS_FILE_EXTENSION = ".txt"
+        PICKLE_FILE_EXTENSION = ".pkl"
         mode = "train" if train else "eval"
         time_now = datetime.datetime.now().strftime("%m_%d_%Y__%H_%M_%S")
 
@@ -26,6 +28,7 @@ class Logger:
         params_filename = log_params[mode + "_params_file"] + '_' + time_now + PARAMS_FILE_EXTENSION
         self.params_file = os.path.join(output_dir, params_filename)
         
+        
         weights_dir = os.path.join(curdir, "runs/weights")
         if not os.path.isdir(weights_dir):
             os.makedirs(weights_dir)
@@ -34,6 +37,8 @@ class Logger:
             #self.weights_file = os.path.join(output_dir, weights_filename)
             self.weights_file = os.path.join(weights_dir, weights_filename)
         else:
+            pickle_filename = log_params[mode + "_pickle_file"].replace("-", "_") + '_' + time_now + PICKLE_FILE_EXTENSION
+            self.pickle_file = os.path.join(output_dir, pickle_filename)
             if weights_file is None:
                 #train_dir = os.path.join(curdir, "runs/train")
                 #if not os.path.isdir(train_dir):
@@ -203,3 +208,7 @@ class Logger:
                 f.write(f"Training time: {computation_time}\n")
             else:
                 f.write(f"Testing time: {computation_time}\n")
+
+    def save_pickle(self, situation_action_agent_dict):
+        with open(self.pickle_file, 'wb') as f:
+            pickle.dump(situation_action_agent_dict, f)
