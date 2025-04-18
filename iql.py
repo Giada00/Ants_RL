@@ -22,16 +22,16 @@ def train(
         logger,
         visualizer=None
     ):
-    # TRAINING
+    """
+    Train agent employing Q-learning algorithm
+    """
     print("Start training...\n")
     
     n_actions = env.actions_n()
-    old_s = {}  # DOC old state for each agent {agent: old_state}
+    old_s = {} 
     old_a = {}
-    #actions = [0, 1, 2, 3, 6, 7]
-    #actions_looking_for_food = [0, 2, 6]
 
-    # Restricted actions here
+    # Restricted actions
     #actions_has_food = [3, 7]
     #actions_looking_for_food = [0, 2]
 
@@ -70,7 +70,7 @@ def train(
 
                 cur_s = env.convert_observation(cur_state)
 
-                # Restricted code starts here
+                # Restricted behaviour starts here
                 # if ep == 1 and tick == 1:
                 #     action = actions_looking_for_food[np.random.randint(0, len(actions_looking_for_food))]
                 # else:
@@ -103,9 +103,8 @@ def train(
                 #             else:
                 #                 action = actions_looking_for_food[np.argmax(qtable[int(agent)][cur_s][actions_looking_for_food])]
                 #             # action = 2 # follow food pheromone 
-                # Restricted code ends here
+                # Restricted behaviour ends here
                     
-
                 if ep == 1 and tick == 1:
                     action = np.random.randint(0, n_actions)
                 else:
@@ -167,7 +166,6 @@ def train(
             epsilon = max(epsilon - (1 - decay), epsilon_min)
         
         if ep % train_log_every == 0:
-            #avg_rew = round((sum(reward_dict[str(ep)].values()) / params["episode_ticks"]) / params["learner_population"], 2)
             avg_rew = round((sum({agent: rew/ticks_per_episode[str(ep)][str(agent)] for agent, rew in reward_dict[str(ep)].items()}.values()) / params["learner_population"]), 2)
             eps = round(epsilon, 4)
             value = [ep, tick * ep, avg_rew]
@@ -202,14 +200,13 @@ def eval(
         logger,
         visualizer=None
     ):
-    # DOC Evaluate agent's performance after Q-learning
-    #n_actions = env.actions_n()
+    """
+    DOC Evaluate agent's performance after Q-learning
+    """
 
     print("Start testing...\n")
-    #actions = [4, 5]
-    #actions_looking_for_food = [0, 2, 6]
 
-    # Restricted actions here
+    # Restricted actions
     #actions_has_food = [3, 7]
     #actions_looking_for_food = [0, 2]
 
@@ -251,7 +248,7 @@ def eval(
                     s = env.convert_observation(state)
                     action = np.argmax(qtable[int(agent)][s])
 
-                    # Restricted code starts here
+                    # Restricted behavior starts here
                     # if agent_has_food == 1:
                     #     if agent_in_nest:
                     #         action = 5 # drop food
@@ -264,7 +261,7 @@ def eval(
                     #     else:
                     #         action = actions_looking_for_food[np.argmax(qtable[int(agent)][s][actions_looking_for_food])]
                     #         #action = 2 # follow food pheromone
-                    # Restricted code ends here
+                    # Restricted behavior ends here
 
                     if agent_has_food == 1:
                         if agent_in_nest == 1:
@@ -308,7 +305,6 @@ def eval(
                 )
         
         if ep % test_log_every == 0:
-            #avg_rew = round((sum(reward_dict[str(ep)].values()) / params["episode_ticks"]) / params["learner_population"], 2)
             avg_rew = round((sum({agent: rew/ticks_per_episode[str(ep)][str(agent)] for agent, rew in reward_dict[str(ep)].items()}.values()) / params["learner_population"]), 2)
 
             value = [ep, tick * ep, avg_rew]

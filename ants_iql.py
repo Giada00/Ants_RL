@@ -15,21 +15,14 @@ def create_agent(params: dict, l_params: dict, n_obs, n_actions, train):
     learner_population = params['learner_population']
     episodes =  l_params["train_episodes"] if train else l_params["test_episodes"]
     states = params["states"]
-    # DOC dict che tiene conto della frequenza di scelta delle action per ogni episodio {episode: {action: _, action: _, ...}}
-    # Actions:
-    #   0: random-walk 
-    #   1: drop-chemical 
-    #   2: move-toward-chemical 
-    #   3: move-away-chemical 
-    #   4: walk-and-drop 
-    #   5: move-and-drop
+
     actions_dict = {
         str(ep): {
             str(ac): 0 
             for ac in range(n_actions)
         } for ep in range(1, episodes + 1)
-    }  # DOC 0 = walk, 1 = lay_pheromone, 2 = follow_pheromone
-    # DOC dict che tiene conto della frequenza di scelta delle action di ogni agent per ogni episodio {episode: {agent: {action: _, action: _, ...}}}
+    }  
+
     action_dict = {
         str(ep): {
             str(ag): {
@@ -38,7 +31,7 @@ def create_agent(params: dict, l_params: dict, n_obs, n_actions, train):
             } for ag in range(population, population + learner_population)
         } for ep in range(1, episodes + 1)
     }
-    # DOC dict che tiene conto della reward di ogni agente per ogni episodio {episode: {agent: _}}
+
     reward_dict = {
         str(ep): {
             str(ag): 0 
@@ -81,15 +74,13 @@ def create_agent(params: dict, l_params: dict, n_obs, n_actions, train):
     }
 
     if train:
-        # Q-Learning
-        # Q_table
         qtable = np.zeros([learner_population, n_obs, n_actions])
-        alpha = l_params["alpha"]  # DOC learning rate (0 learn nothing 1 learn suddenly)
-        gamma = l_params["gamma"]  # DOC discount factor (0 care only bout immediate rewards, 1 care only about future ones)
-        epsilon = l_params["epsilon"]  # DOC chance of random action
-        epsilon_min = l_params["epsilon_min"]  # DOC chance of random action
-        decay_type = l_params["decay_type"]  # DOC di quanto diminuisce epsilon ogni episode (e.g. 1500 episodes => decay = 0.9995)
-        decay = l_params["decay"]  # DOC di quanto diminuisce epsilon ogni episode (e.g. 1500 episodes => decay = 0.9995)
+        alpha = l_params["alpha"]  # learning rate (0 learn nothing 1 learn suddenly)
+        gamma = l_params["gamma"]  # discount factor (0 care only bout immediate rewards, 1 care only about future ones)
+        epsilon = l_params["epsilon"]  # chance of random action
+        epsilon_min = l_params["epsilon_min"]  # chance of random action
+        decay_type = l_params["decay_type"]  # of how much epsilon decreases at each episode (e.g. 1500 episodes => decay = 0.9995)
+        decay = l_params["decay"]  # of how much epsilon decreases at each episode (e.g. 1500 episodes => decay = 0.9995)
         return (
             qtable,
             alpha,
@@ -302,14 +293,11 @@ if __name__ == "__main__":
     parser.add_argument(
         "--qtable_path",
         type=str,
-        #default="C:/Users/Giash/Desktop/Ants_RL/runs/weights/iql_train_weights_reward_nest_food_punish_wandering_time_02_08_2025__00_06_05.npy",
-        #default = "c:/Users/Giash/Desktop/Ants_RL/runs/weights/iql_train_weights_reward_nest_food_punish_wandering_time_02_10_2025__11_46_14.npy",
-        #default = "C:/Users/Giash/Desktop/Ants_RL/runs/weights/iql_train_weights_reward_nest_food_punish_wandering_time_03_27_2025__00_03_27.npy",
-        default = "C:/Users/Giash/Desktop/Ants_RL/runs/weights/iql_train_weights_reward_relative_food_punish_wandering_time_04_10_2025__12_43_44.npy",
+        #default = "C:/Users/Giash/Desktop/Ants_RL/runs/weights/iql_train_weights_reward_relative_food_punish_wandering_time_04_10_2025__12_43_44.npy",
         required=False
     )
     
-    parser.add_argument("--train", type=bool, default=False, required=False)
+    parser.add_argument("--train", type=bool, default=True, required=False)
 
     parser.add_argument("--random_seed", type=int, default=42, required=False)
     

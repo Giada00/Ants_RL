@@ -14,26 +14,44 @@ from typing import Optional
 
 class Ants(AECEnv):
     def observe(self, agent: str) -> ObsType:
+        """
+        Returns the current observetion of the given agent.
+
+        param: agent : agent of interest
+        """
         self.agent = self.agent_name_mapping[agent]
-        #self.observations[agent] = self.process_agent()
         self.observations[agent] = self._get_obs2(self.learners[self.agent])
         return np.array(self.observations[agent])
 
-    def observation_space(self, agent):
+    def observation_space(self, agent : str):
+        """"
+        Returns the observation space of the given agent
+
+        param: agent : agent of interest
+        """
         return self._observation_spaces[agent]
     
-    def action_space(self, agent):
+    def action_space(self, agent : str):
+        """"
+        Returns the action space of the given agent
+
+        param: agent : agent of interest
+        """
         return self._action_spaces[agent]
       
     def observations_n(self, same_obs=True):
-        #if same_obs:
-        #    return self.observation_space('0').shape[0]
+        """"
+        Returns the number of possibile observations that each agent can get.
+        """
         if self.sniff_patches > 3:
-            return pow(2, 9)
+            return pow(2, 9) # the observation is a 9 bits binary number
         else:
-            return pow(2, 7)
+            return pow(2, 7) # the observation is a 7 bits binary number
 
     def actions_n(self, same_actions=True):
+        """
+        Returns the number of possible actions that each agent can perform.
+        """
         if same_actions:
             return self.action_space('0').n.item()
     
@@ -131,8 +149,6 @@ class Ants(AECEnv):
             self.nest_pos = self.coords[(len(self.coords) // 2)]
 
         self.patches = self._setup_nest(self.patches, self.nest_pos)
-        #print(self.nest_pos)
-        #print(self.patches)
 
         # Setup food piles
         self.food_piles_pos = (
@@ -142,9 +158,8 @@ class Ants(AECEnv):
         )
 
         self.patches, self.total_food_amount = self._setup_food_piles(self.patches, self.food_piles_pos)
-        #print("Total food: ", self.total_food_amount)
 
-        #Create learner turtles
+        # Create learner turtles
         self.learners = {
             i: {
                 "pos": self.nest_pos,
@@ -153,13 +168,15 @@ class Ants(AECEnv):
             } for i in range(self.population, pop_tot)
         }
 
-        # Test added stuf
+        # Data structures employed for incremental and individual reward function variations
         self.learners_view_of_nest = {
             i: 0 for i in range(self.population, pop_tot)
         }
         self.food_individually_retrieved = {
             i: 0 for i in range(self.population, pop_tot)
         }
+
+        # Variable employed for episode termination after the food is finished
         self.learners_done = 0
         self.all_learners_done = False
 
@@ -205,7 +222,9 @@ class Ants(AECEnv):
         )
 
     def _field_of_view(self, n_patches):
-        # Pre-compute every possible agent's direction
+        """
+        Pre-compute every possible agent's direction
+        """
         fov = {}
         
         if n_patches < self.N_DIRS:
@@ -246,7 +265,12 @@ class Ants(AECEnv):
         new_dirs = np.array([(i + start) % self.N_DIRS for i in range(n_patches)])
         return new_dirs[idx_dir]
     
-    def _get_obs2(self, agent): # obs = [agent_has_food, patch_has_food, agent_in_nest, food_pheromone_in_ph_fov, nest_pheromone_in_ph_fov]
+    def _get_obs2(self, agent):
+        """
+        Compute the current observation of the given agent.
+        The structure of the observation is the following:
+        [agent_has_food, patch_has_food, agent_in_nest, food_pheromone_in_ph_fov, nest_pheromone_in_ph_fov]
+        """
         f, _ = self._get_new_positions(self.ph_fov, agent)
         obs = [int(agent["food"]>0), int(self.patches[agent["pos"]]["food"]>0), self.patches[agent["pos"]]["nest"]]
         obs.extend([self.patches[tuple(i)]["food_pheromone"] for i in f])
@@ -255,6 +279,10 @@ class Ants(AECEnv):
         return obs
     
     def convert_observation(self, obs):
+        """
+        Converts the given observation into a unique integer which can be employed 
+        to index the Q-table along with the action identifier
+        """
         agent_has_food = int(obs[0].item())
         patch_has_food = int(obs[1].item())
         agent_in_nest = int(obs[2].item())
@@ -270,9 +298,6 @@ class Ants(AECEnv):
             nest_pheromone_obs_index = np.random.randint(self.sniff_patches)
         else:
             nest_pheromone_obs_index = nest_pheromone_obs.argmax().item()
-
-        #food_pheromone_obs_index = food_pheromone_obs.argmax().item()
-        #nest_pheromone_obs_index = nest_pheromone_obs.argmax().item()
         
         food_pheromone_obs_bin = bin(food_pheromone_obs_index).split('b')[1]
         nest_pheromone_obs_bin = bin(nest_pheromone_obs_index).split('b')[1]
@@ -379,14 +404,12 @@ class Ants(AECEnv):
         return observations
     
     def step(self, action: int):
-
-        # if(self.terminations[self.agent_selection] or self.truncations[self.agent_selection]):
-        #     self._was_dead_step(action)
-        #     return
+        """
+        Lets the current agent perform the given action, than computes its reward and checks if
+        it needs to be terminated because the food is finished or not. 
+        """
         
         self.agent = self.agent_name_mapping[self.agent_selection]  # ID of agent
-
-        #self.observations[str(self.agent)] = self.process_agent()
 
         if not (self.terminations[self.agent_selection] or self.truncations[self.agent_selection]):
 
@@ -457,7 +480,6 @@ class Ants(AECEnv):
                         self.learners[self.agent]
                     )
             elif action == 4:   # Take food
-                #print("agent", self.agent, "patch_has_food: ", patch_has_food)
                 if agent_has_food == 0 and patch_has_food == 1 and agent_in_nest == 0: # Ant can't take nest food now
                     self.patches, self.learners[self.agent] = self.take_food(self.patches, self.learners[self.agent])
                 else:
@@ -491,8 +513,6 @@ class Ants(AECEnv):
             #    self.patches, self.learners[self.agent] = self.step_forward(self.patches, self.learners[self.agent])
             else:
                 raise ValueError("Action out of range!")
-            
-            #self.observations[str(self.agent)] = self.process_agent()
 
             if self.reward_type == "reward_nest_food_punish_piles_food_and_wandering_time":
                 self.carrying_food_ticks, self.searching_food_ticks, self.rewards_cust, cur_reward = self.reward_nest_food_punish_piles_food_and_wandering_time(self.carrying_food_ticks, self.searching_food_ticks, self.rewards_cust)
@@ -502,13 +522,12 @@ class Ants(AECEnv):
                 self.carrying_food_ticks, self.searching_food_ticks, self.rewards_cust, cur_reward = self.reward_relative_food_punish_wandering_time(self.carrying_food_ticks, self.searching_food_ticks, self.rewards_cust)
             elif self.reward_type == "reward_nest_food_punish_wandering_time_incremental":
                 self.rewards_cust, cur_reward = self.reward_nest_food_punish_wandering_time_incremental(self.rewards_cust)
-            elif self.reward_type == "reward_indiviually_retrieved_nest_food_punish_wandering_time_incremental":
-                self.rewards_cust, cur_reward = self.reward_indiviually_retrieved_nest_food_punish_wandering_time_incremental(self.rewards_cust)
-            elif self.reward_type == "reward_indiviually_retrieved_nest_food_punish_wandering_time":
-                self.carrying_food_ticks, self.searching_food_ticks, self.rewards_cust, cur_reward = self.reward_indiviually_retrieved_nest_food_punish_wandering_time(self.carrying_food_ticks, self.searching_food_ticks, self.rewards_cust)
+            elif self.reward_type == "reward_individually_retrieved_nest_food_punish_wandering_time_incremental":
+                self.rewards_cust, cur_reward = self.reward_individually_retrieved_nest_food_punish_wandering_time_incremental(self.rewards_cust)
+            elif self.reward_type == "reward_individually_retrieved_nest_food_punish_wandering_time":
+                self.carrying_food_ticks, self.searching_food_ticks, self.rewards_cust, cur_reward = self.reward_individually_retrieved_nest_food_punish_wandering_time(self.carrying_food_ticks, self.searching_food_ticks, self.rewards_cust)
             
             # Terminate the current agent if there is no more food to be found
-
             food_in_nest = 0
             for coords, info in self.patches.items():
                 if info["nest"]:
@@ -618,7 +637,9 @@ class Ants(AECEnv):
         return patches
     
     def _find_max_pheromone2(self, agent, obs):
-        # Det = follow greatest pheromone
+        """
+        Finds the direction in the agent fov in which the pheromone scent is stronger
+        """
         f, direction = self._get_new_positions(self.ph_fov, agent)
     
         idx = obs.argmax().item()
@@ -642,6 +663,9 @@ class Ants(AECEnv):
         return ph_val, ph_pos, ph_dir
     
     def follow_pheromone2(self, patches, ph_coords, ph_dir, turtle):
+        """
+        Makes the agent take a step forward in the direction of gratest pheromone scent
+        """
         patches[turtle['pos']]['turtles'].remove(self.agent)
         turtle["pos"] = ph_coords
         patches[turtle['pos']]['turtles'].append(self.agent)
@@ -649,6 +673,9 @@ class Ants(AECEnv):
         return patches, turtle
     
     def walk2(self, patches, turtle):
+        """
+        Makes the agent take a step forward in a random direction in its fov
+        """
         f, direction = self._get_new_positions(self.fov, turtle)
         idx_dir = np.random.randint(f.shape[0])
         patches[turtle['pos']]['turtles'].remove(self.agent)
@@ -661,6 +688,9 @@ class Ants(AECEnv):
         return patches, turtle
     
     def step_forward(self, patches, turtle):
+        """
+        Makes the agent take a step forward in its current direction
+        """
         f, direction = self._get_new_positions(self.fov, turtle)
         if self.wiggle_patches < self.N_DIRS:
             idx_dir = f.shape[0] // 2
@@ -717,7 +747,6 @@ class Ants(AECEnv):
 
         self.patches, self.total_food_amount = self._setup_food_piles(self.patches, self.food_piles_pos)
         self.patches = self._setup_nest(self.patches, self.nest_pos)
-        #print("Total food reset: ", self.total_food_amount)
 
         self.observations = {
             a: np.zeros(self.wiggle_patches*2+3, dtype=np.float32)
@@ -731,7 +760,9 @@ class Ants(AECEnv):
         self.agent_selection = self._agent_selector.next()
 
     def _setup_nest(self, patches, nest_pos):
-
+        """
+        Setup nest patches and nest pheromone
+        """
         nest_coords = []
         pos = (nest_pos[0] - self.patch_size * 2, nest_pos[0] + self.patch_size * 2)
         start = nest_pos[1] - self.patch_size
@@ -754,12 +785,13 @@ class Ants(AECEnv):
             patches[patch]["nest_pheromone"] = 100 - (
                 ((abs(patch[0]-nest_pos[0])) + (abs(patch[1]-nest_pos[1]))) / self.patch_size
             )
-            #patches[patch]["nest_pheromone"] = 100 - math.sqrt(pow((patch[0]-nest_pos[0])/self.patch_size, 2) + pow((patch[1]-nest_pos[1])/self.patch_size, 2))
             
         return patches
     
     def _setup_food_piles(self, patches, food_piles_pos):
-
+        """
+        Setup food piles patches and food
+        """
         food_piles_coords = []
         for food_pile in food_piles_pos:
             pos = (food_pile[0] - self.patch_size * 2, food_pile[0] + self.patch_size * 2)
@@ -788,6 +820,10 @@ class Ants(AECEnv):
         return patches, total_food
 
     def drop_food(self, patches, ant):
+        """
+        Makes the agent drop the food that it is carrying and eventually
+        make a 180 degrees turn depending on the take_drop_mode parameter
+        """
         ant["food"] -= 1
         patches[ant["pos"]]["food"] += 1
         if self.take_drop_mode == "turn_away":
@@ -795,6 +831,10 @@ class Ants(AECEnv):
         return patches, ant
     
     def take_food(self, patches, ant):
+        """
+        Makes the agent take the food from the patch on which it is standing and eventually
+        make a 180 degrees turn depending on the take_drop_mode parameter
+        """
         ant["food"] += 1
         patches[ant["pos"]]["food"] -= 1
         if self.take_drop_mode == "turn_away":
@@ -802,6 +842,12 @@ class Ants(AECEnv):
         return patches, ant
 
     def reward_nest_food_punish_piles_food_and_wandering_time(self, carrying_food_ticks, searching_food_ticks, rewards_cust):
+        """
+        Reward function that gives a cumulative reward to the agent composed by:
+            - the penalty parameter multiplied by the total amount of food still in the food piles
+            - the penalty parameter multiplied by the total amount of ticks that has passed
+            - the reward parameter multiplied by the total amount of food in the nest
+        """
         if self.learners[self.agent]["food"] > 0:
             carrying_food_ticks[self.agent] += 1
         else:
@@ -824,22 +870,11 @@ class Ants(AECEnv):
         return carrying_food_ticks, searching_food_ticks, rewards_cust, cur_reward
     
     def reward_nest_food_punish_wandering_time(self, carrying_food_ticks, searching_food_ticks, rewards_cust):
-
-        # Test part
-
-        # food_piles = 0
-        # for coords, info in self.patches.items():
-        #     if info["food_pile"]:
-        #         food_piles += info["food"]
-
-        # if food_piles:
-        #     if self.learners[self.agent]["food"] > 0:
-        #         carrying_food_ticks[self.agent] += 1
-        #     else:
-        #         searching_food_ticks[self.agent] += 1
-
-
-        # End test part
+        """
+        Reward function that gives a cumulative reward to the agent composed by:
+            - the penalty parameter multiplied by the total amount of ticks that has passed
+            - the reward parameter multiplied by the total amount of food in the nest
+        """
 
         if self.learners[self.agent]["food"] > 0:
             carrying_food_ticks[self.agent] += 1
@@ -859,6 +894,12 @@ class Ants(AECEnv):
         return carrying_food_ticks, searching_food_ticks, rewards_cust, cur_reward
     
     def reward_relative_food_punish_wandering_time(self, carrying_food_ticks, searching_food_ticks, rewards_cust):
+        """
+        Reward function that gives a cumulative reward to the agent composed by:
+            - the penalty parameter multiplied by the total amount of ticks that has passed
+            - the reward parameter multiplied by the ratio between the amount of food still in the food piles and the amount of food in the nest
+        """
+        
         if self.learners[self.agent]["food"] > 0:
             carrying_food_ticks[self.agent] += 1
         else:
@@ -880,7 +921,11 @@ class Ants(AECEnv):
         return carrying_food_ticks, searching_food_ticks, rewards_cust, cur_reward
     
     def reward_nest_food_punish_wandering_time_incremental(self, rewards_cust):
-
+        """
+        Reward function that gives an incremental reward to the agent composed by:
+            - a penalty equivalent to the penalty parameter because a tick has passed
+            - the reward parameter multiplied by the amount of food that has been brough to the nest since the last time it acted
+        """
         food_nest = 0
         for coords, info in self.patches.items():
             if info["nest"]:
@@ -893,7 +938,12 @@ class Ants(AECEnv):
         rewards_cust[self.agent].append(cur_reward)
         return rewards_cust, cur_reward
     
-    def reward_indiviually_retrieved_nest_food_punish_wandering_time_incremental(self,rewards_cust):
+    def reward_individually_retrieved_nest_food_punish_wandering_time_incremental(self,rewards_cust):
+        """
+        Reward function that gives an incremental reward to the agent composed by:
+            - a penalty equivalent to the penalty parameter because a tick has passed
+            - a reward equivalent to the reward parameter if it has brought food to the nest with its action
+        """
 
         cur_reward = self.penalty + self.food_individually_retrieved[self.agent] * self.reward
         
@@ -902,7 +952,12 @@ class Ants(AECEnv):
         rewards_cust[self.agent].append(cur_reward)
         return rewards_cust, cur_reward
     
-    def reward_indiviually_retrieved_nest_food_punish_wandering_time(self, carrying_food_ticks, searching_food_ticks, rewards_cust):
+    def reward_individually_retrieved_nest_food_punish_wandering_time(self, carrying_food_ticks, searching_food_ticks, rewards_cust):
+        """
+        Reward function that gives a cumulative reward to the agent composed by:
+            - a penalty equivalent to the penalty parameter because a tick has passed
+            - the reward parameter multiplied by the amount of food it has brought to the nest
+        """
 
         if self.learners[self.agent]["food"] > 0:
             carrying_food_ticks[self.agent] += 1
@@ -1160,14 +1215,10 @@ def main():
 
     start_time = time.time()
     for ep in tqdm(range(1, EPISODES + 1), desc="Episode"):
-        with open('out.txt', 'a') as f:
-            print("Episode: ", ep, file = f)
         env.reset()
         rew_d[ep] = {}
         ticks_per_episode[ep] = {}
         for tick in tqdm(range(1, params['episode_ticks'] + 1), desc="Tick", leave=False):
-            with open('out.txt', 'a') as f:
-                print("Tick: ", tick, file = f)
 
             for agent in env.agent_iter(max_iter=params["learner_population"]):
 
@@ -1175,12 +1226,6 @@ def main():
                     break
 
                 observation, reward, termination, truncation, info = env.last(agent)
-
-                with open('out.txt', 'a') as f:
-                        print("Agent:", agent, "Reward: ", reward, file = f)
-
-                with open("prova.txt", 'a') as f1:
-                    print(ep, tick, agent, reward, sep = ",", file = f1)
                 
                 if agent in ticks_per_episode[ep].keys():
                     ticks_per_episode[ep][agent] += 1
@@ -1203,14 +1248,12 @@ def main():
                         if agent_in_nest:
                             action = 5 # drop food
                         else:
-                            #action = 7 # lay food pheromone and head back to nest
-                            action = 3 # 3 7
+                            action = 7 # lay food pheromone and head back to nest
                     else:
                         if patch_has_food == 1 and agent_in_nest == 0:
                             action = 4 # take food
                         else:
-                            #action = 2 # follow food pheromone
-                            action = 0 # 0 2
+                            action = 2 # follow food pheromone
                 
                 env.step(action)
 
@@ -1223,22 +1266,16 @@ def main():
                 env.turtles
             )
 
-        sum_nest = 0
-        sum_piles = 0
-        for coords, info in env.patches.items():
-            if info["nest"]:
-                sum_nest += info["food"]
-            else:
-                sum_piles += info["food"]
+        # sum_nest = 0
+        # sum_piles = 0
+        # for coords, info in env.patches.items():
+        #     if info["nest"]:
+        #         sum_nest += info["food"]
+        #     else:
+        #         sum_piles += info["food"]
         #print(f"nest: {sum_nest} piles: {sum_piles}")
         
         print("Average reward:", round((sum({agent: rew/ticks_per_episode[ep][agent] for agent, rew in rew_d[ep].items()}.values()) / params["learner_population"]), 2))
-        #print("Average reward:", round((sum(rew_d[ep].values()) / params["episode_ticks"]) / params["learner_population"], 2))
-        with open('out.txt', 'a') as f:
-            #print("Average reward:", round((sum(rew_d[ep].values()) / params["episode_ticks"]) / params["learner_population"], 2), file = f)
-            print("Average reward:", round((sum({agent: rew/ticks_per_episode[ep][agent] for agent, rew in rew_d[ep].items()}.values()) / params["learner_population"]), 2), file = f)
-            print({key : value + env.searching_food_ticks[key] for key, value in env.carrying_food_ticks.items()})
-            print(ticks_per_episode)
 
     print("Total time = ", time.time() - start_time)
     env.close()
